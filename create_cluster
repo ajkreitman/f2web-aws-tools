@@ -1,0 +1,31 @@
+# Steps
+on master server
+
+# Set 20 to however large the mbs root device should be
+ec2-run-instances ami-274d944e -b /dev/sda1=:20 -t t1.micro
+
+get IP # of new server
+as root
+scp /mnt/f2web.apps/* ec2-user@`c#`:/mnt/f2web.apps/.
+/etc/init.d/mysqld stop
+rm -rf /media/ephemeral0/f2web-mysql.tgz
+tar -cvzf /media/ephemeral0/f2web-mysql.tgz /mnt/f2web.apps/data/mysql/*
+scp /media/ephemeral0/f2web-mysql.tgz ec2-user@`c#`:/mnt/f2web.apps/data/.
+/etc/init.d/mysqld start
+
+get IP # of new server
+cs # (where # is the instance number)
+
+resize2fs /dev/sda1
+type figlet "f2web-c#" > /etc/motd
+
+cd /mnt/f2web.apps/data
+tar -xvzf f2web-mysql.tgz
+rm f2web-mysql.tgz
+/etc/init.d/mysqld start
+
+# Clear cache folders for all modx instances
+cd /mnt/f2web.apps/htdocs.tobin/core/cache
+rm -rf *
+chown -R apache.apache /mnt/f2web.apps/htdocs.tobin/core/
+

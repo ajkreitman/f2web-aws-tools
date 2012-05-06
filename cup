@@ -1,0 +1,10 @@
+#!/usr/bin/php
+<?php
+
+require_once(dirname(__FILE__) . '/lib/f2.class.php'); 
+
+$ips = f2web::getClusterIPs();
+
+foreach ($ips as $i) {
+   print $i . ":" . exec("ssh ec2-user@{$i} 'uptime'") . "\n";
+}

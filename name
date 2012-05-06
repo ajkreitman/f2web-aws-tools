@@ -1,0 +1,20 @@
+#!/usr/bin/php
+<?php
+    require_once('AWSSDKforPHP/sdk.class.php');
+    $ec2 = new AmazonEC2();
+
+    @$instance_id = file_get_contents("http://169.254.169.254/latest/meta-data/instance-id");
+
+    $response = $ec2->describe_instances(array('InstanceId' => $instance_id));
+
+    foreach ($response->body->reservationSet->item as $item) {
+        $tags = array();
+      
+        if (isset($item->instancesSet->item->tagSet) and $item->instancesSet->item->instanceState->name == 'running') {
+            foreach ($item->instancesSet->item->tagSet->item as $tag) {
+                if (strtolower($tag->key) == "name") {
+                    print $tag->value . "\n";
+                }
+            }
+        }
+    }

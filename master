@@ -1,0 +1,23 @@
+#!/usr/bin/php
+<?php        
+        require_once('AWSSDKforPHP/sdk.class.php');
+
+        $ec2 = new AmazonEC2();
+
+        $response = $ec2->describe_instances();
+
+        foreach ($response->body->reservationSet->item as $item) {
+            $tags = array();
+
+            if (isset($item->instancesSet->item->tagSet) and $item->instancesSet->item->instanceState->name == 'running') {
+               foreach ($item->instancesSet->item->tagSet->item as $t) {
+                   $tags["{$t->key}"]= (string)$t->value;
+               }
+
+               if (array_key_exists('master', $tags)) {
+                   print (string)$item->instancesSet->item->privateIpAddress;
+               }
+           }
+       }
+
+

@@ -1,0 +1,74 @@
+#!/usr/bin/php
+<?php        
+    # ec2-register -n "Genesis-v1.09" -d "Genesis Production EBS AMI (with ephemeral)" --block-device-mapping  '/dev/sda2=ephemeral0' --block-device-mapping '/dev/sda3=ephemeral1' --snapshot 'snap-f8f3c29c' --architecture x86_64 --kernel aki-427d952b
+    
+    $args = getopt('v:s:n:',array('help'));
+    
+    if (array_key_exists('help', $args)) {
+        print "Creates an AMI from a Snapshot, and includes Ephemeral Storage:\n";
+        print " Usage:\n";
+        print "    -v version-number (ex: 1.0.0)\n";
+        print "    -s snapshot (ex: snap-f8f1c31a). If excluded, a snapshot will be created from the root EBS volume.\n";
+        print "    -n name [optional] (ex: f2Web_AMI_v1.0.0)\n\n";
+        exit;
+    }
+
+    require_once('AWSSDKforPHP/sdk.class.php');
+    $ec2 = new AmazonEC2();
+
+    @$v = $args['v'];
+    @$instance_id = file_get_contents("http://169.254.169.254/latest/meta-data/instance-id");
+
+    @$name = !empty($args['n']) ? $args['n'] : "f2web-v{$v}";
+    @$desc = "f2Web AMI (with ephemeral)" . (!empty($v) ? " - {$v}" : '');
+    @$snap = $args['s'];
+
+    if (empty($v) and empty($n)) {
+        print "Must either provide a -v (version number), or a -n (AMI name).  Use --help for usage information\n\n";
+        exit;
+    }
+
+    $response = $ec2->describe_instances(array('InstanceId' => $instance_id));
+    $arch = $response->body->reservationSet->item->instancesSet->item->architecture;
+    $kernel_id = $response->body->reservationSet->item->instancesSet->item->kernelId;
+
+    if (empty($kernel_id) or empty($arch)) {
+        print "Oops - something happened trying to get Kernel ID or Architecture..  Try again. \n\n";
+        exit;
+    }
+
+    if (empty($snap)) {
+        $root_vol = $response->body->reservationSet->item->instancesSet->item->rootDeviceName;
+        foreach ($response->body->reservationSet->item->instancesSet->item->blockDeviceMapping->item as $vol) {
+            if (trim($vol->deviceName) == $root_vol) {
+                $vol_id = $vol->ebs->volumeId;
+                break;
+            }
+        }
+
+        # no snapshot provided - create one and wait for it
+        print "No snapshot provided, creating one from volume {$vol_id}\n";
+        $response = $ec2->create_snapshot($vol_id, array('Description' => $desc));
+        $snap = $response->body->snapshotId;
+
+        $cnt = 0;
+        $status = $response->body->status;
+        print "Snapshot {$snap} created, waiting for it to be completed...\n";
+        while (($status != 'completed') and $cnt <= 100) {
+            if ($cnt > 0) {
+                sleep(2);
+            }
+            $response = $ec2->describe_snapshots(array('SnapshotId' => $snap));
+            $status = $response->body->snapshotSet->item->status;
+            $cnt++;
+        }
+        if ($status != 'completed') {
+            print "Snapshot creation failed - try again using -s {$snap}\n";
+            exit;
+        } 
+    }
+
+
+    $cmd = "ec2-register -n \"{$name}\" -d \"{$desc}\" --block-device-mapping  '/dev/sda2=ephemeral0' --block-device-mapping '/dev/sda3=ephemeral1' --snapshot '{$snap}' --architecture {$arch} --kernel {$kernel_id}";
+    print "Creating AMI from snapshot using this command:\n {$cmd}\n";
+    passthru($cmd);
